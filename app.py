@@ -1,16 +1,18 @@
 from flask import Flask, render_template, request, redirect, session
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
+import os
 
 app = Flask(__name__)
 app.secret_key = "Pavan@2007"
 
-# Database connection
+# DB Connection
 def get_db():
-    return sqlite3.connect("crm.db")
+    conn = sqlite3.connect("crm.db")
+    conn.row_factory = sqlite3.Row
+    return conn
 
-# Initialize DB
-@app.route('/init_db')
+# Auto create tables (IMPORTANT for Render)
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
@@ -34,7 +36,8 @@ def init_db():
 
     conn.commit()
     conn.close()
-    return "Database initialized"
+
+init_db()
 
 # Create admin user
 @app.route('/create_user')
@@ -42,18 +45,46 @@ def create_user():
     conn = get_db()
     cursor = conn.cursor()
 
-    username = "admin"
     password = generate_password_hash("1234")
 
     cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)",
-                   (username, password))
+                   ("admin", password))
 
     conn.commit()
     conn.close()
-    return "User created"
+    return "Admin created"
 
-# Home page
-@app.route('/', methods=['GET'])
+# Login
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        conn = get_db()
+        cursor = conn.cursor()
+
+        username = request.form['username']
+        password = request.form['password']
+
+        cursor.execute("SELECT * FROM users WHERE username=?", (username,))
+        user = cursor.fetchone()
+
+        conn.close()
+
+        if user and check_password_hash(user['password'], password):
+            session['user'] = username
+            return redirect('/')
+        else:
+            return render_template('login.html', error="Invalid Credentials")
+
+    return render_template('login.html')
+
+# Logout
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect('/login')
+
+# Dashboard
+@app.route('/')
 def index():
     if 'user' not in session:
         return redirect('/login')
@@ -64,44 +95,33 @@ def index():
     search = request.args.get('search')
 
     if search:
-        cursor.execute(
-            "SELECT * FROM customers WHERE name LIKE ? OR email LIKE ?",
-            ('%' + search + '%', '%' + search + '%')
-        )
+        cursor.execute("SELECT * FROM customers WHERE name LIKE ?", ('%' + search + '%',))
     else:
         cursor.execute("SELECT * FROM customers")
 
-    data = cursor.fetchall()
+    customers = cursor.fetchall()
 
     cursor.execute("SELECT COUNT(*) FROM customers")
     total = cursor.fetchone()[0]
 
     conn.close()
 
-    return render_template('index.html', customers=data, total=total)
+    return render_template('index.html', customers=customers, total=total)
 
-# Add customer
+# Add
 @app.route('/add', methods=['GET', 'POST'])
 def add():
-    if 'user' not in session:
-        return redirect('/login')
-
     if request.method == 'POST':
-        name = request.form['name']
-        email = request.form['email']
-        phone = request.form['phone']
-
         conn = get_db()
         cursor = conn.cursor()
 
         cursor.execute(
             "INSERT INTO customers (name, email, phone) VALUES (?, ?, ?)",
-            (name, email, phone)
+            (request.form['name'], request.form['email'], request.form['phone'])
         )
 
         conn.commit()
         conn.close()
-
         return redirect('/')
 
     return render_template('add.html')
@@ -125,57 +145,32 @@ def edit(id):
     cursor = conn.cursor()
 
     if request.method == 'POST':
-        name = request.form['name']
-        email = request.form['email']
-        phone = request.form['phone']
-
         cursor.execute(
             "UPDATE customers SET name=?, email=?, phone=? WHERE id=?",
-            (name, email, phone, id)
+            (request.form['name'], request.form['email'], request.form['phone'], id)
         )
-
         conn.commit()
         conn.close()
-
         return redirect('/')
 
     cursor.execute("SELECT * FROM customers WHERE id=?", (id,))
-    data = cursor.fetchone()
+    customer = cursor.fetchone()
     conn.close()
 
-    return render_template('edit.html', customer=data)
+    return render_template('edit.html', customer=customer)
+@app.route('/show_db')
+def show_db():
+    conn = get_db()
+    cursor = conn.cursor()
 
-# Login
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+    cursor.execute("SELECT * FROM customers")
+    data = cursor.fetchall()
 
-        conn = get_db()
-        cursor = conn.cursor()
+    conn.close()
 
-        cursor.execute("SELECT * FROM users WHERE username=?", (username,))
-        user = cursor.fetchone()
+    return str(data)
 
-        conn.close()
-
-        if user and check_password_hash(user[2], password):
-            session['user'] = username
-            return redirect('/')
-        else:
-            return render_template('login.html', error="Invalid Credentials")
-
-    return render_template('login.html')
-
-# Logout
-@app.route('/logout')
-def logout():
-    session.pop('user', None)
-    return redirect('/login')
-
-import os
-
+# Run (Render compatible)
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)

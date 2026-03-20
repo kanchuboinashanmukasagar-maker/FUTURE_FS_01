@@ -2,20 +2,25 @@
 <html>
 <head>
     <title>Edit Customer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
-<h2>Edit Customer</h2>
+<div class="container">
+    <div class="form-box">
+        <h2>Edit Customer</h2>
 
-<form method="POST">
-    Name: <input type="text" name="name" value="{{customer[1]}}" required><br><br>
-    Email: <input type="email" name="email" value="{{customer[2]}}" required><br><br>
-    Phone: <input type="text" name="phone" value="{{customer[3]}}" required><br><br>
+        <form method="POST">
+            <input type="text" name="name" value="{{customer.name}}" required>
+            <input type="email" name="email" value="{{customer.email}}" required>
+            <input type="text" name="phone" value="{{customer.phone}}" required>
 
-    <button type="submit">Update</button>
-</form>
+            <button type="submit">Update Customer</button>
+        </form>
 
-<a href="/">Back</a>
+        <a href="/" class="button">← Back to Dashboard</a>
+    </div>
+</div>
 
 </body>
 </html>
